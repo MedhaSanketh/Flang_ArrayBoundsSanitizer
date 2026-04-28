@@ -10,7 +10,7 @@ program bench_large_static
   implicit none
   integer, parameter :: N = 100000
   integer :: A(N)
-  integer :: i
+  integer :: i, bad_idx
   integer(kind=8) :: total
 
   ! Initialize
@@ -31,7 +31,8 @@ program bench_large_static
 
   ! ---- OOB PHASE: one access beyond upper bound ----
   print *, "Attempting A(100001) — one beyond upper bound..."
-  A(N + 1) = 999                    ! EXPECTED: OOB ERROR at this line (write, index N+1 > N)
+  bad_idx = N + 1
+  A(bad_idx) = 999                    ! EXPECTED: OOB ERROR at this line (write, index N+1 > N)
 
   print *, "bench_large_static: SHOULD NOT REACH HERE"
 end program bench_large_static

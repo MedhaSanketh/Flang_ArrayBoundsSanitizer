@@ -2,7 +2,7 @@
 ! FILE: test_pointer_reassign.f90
 ! DESC: Pointer is reassigned from a large array to a small one.
 !       An index valid for the first target is OOB for the second.
-! EXPECTED: OOB ERROR at line 32 (index 10 > upper bound 5 after reassign)
+! EXPECTED: OOB ERROR at line 29 (index 10 > upper bound 5 after reassign)
 ! ============================================================
 program test_pointer_reassign
   implicit none

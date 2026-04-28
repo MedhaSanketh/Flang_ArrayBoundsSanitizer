@@ -16,7 +16,7 @@ bounds and aborts with a diagnostic if not.
 *** Fortran Array Bounds Violation ***
 Index:       20
 Valid range: [5 : 15]
-Line:        0
+Line:        10
 ```
 
 ## How to Apply to a Fresh LLVM Checkout
@@ -69,32 +69,32 @@ clang -c runtime/flang_bounds_check.c -o flang_bounds_check.o
 
 ## Covered Cases
 
-| Case | Description | Status |
-|------|-------------|--------|
-| Allocatable arrays | Runtime bounds via descriptor | done |
-| Assumed-shape arrays | Caller-provided bounds | done |
-| Array slices | Transformed bounds | done |
-| Pointer arrays | Dynamic target bounds | done |
-| 2D/3D arrays | Multi-dimensional | Yet to implement  |
+| Case                 | Description                   |
+| -------------------- | ----------------------------- |
+| Allocatable arrays   | Runtime bounds via descriptor |
+| Assumed-shape arrays | Caller-provided bounds        |
+| Array slices         | Transformed bounds            |
+| Pointer arrays       | Dynamic target bounds         |
+| 2D/3D arrays         | Multi-dimensional             |
+| Stride case          | Non-unit array access         |
 
 ## Project Structure
 
-* **pass/**
+- **pass/**
   Contains the HLFIR instrumentation pass implementation.
 
-* **runtime/**
+- **runtime/**
   C-based runtime library used for bounds checking support.
 
-* **tests/**
+- **tests/**
   Includes:
+  - 20 correctness test cases
+  - 3 performance benchmarks
 
-  * 20 correctness test cases
-  * 3 performance benchmarks
-
-* **docs/**
+- **docs/**
   Design notes, explanations, and implementation details.
 
-* **flang_bounds_check.patch**
+- **flang_bounds_check.patch**
   Patch file to be applied to the LLVM/Flang source tree.
 
 ## LLVM Version

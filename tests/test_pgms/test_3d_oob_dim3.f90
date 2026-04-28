@@ -8,6 +8,7 @@ program test_3d_oob_dim3
   implicit none
   integer :: A(3, 3, 3)   ! valid: A(1:3, 1:3, 1:3)
   integer :: i, j, k
+  integer :: d1, d2, d3
 
   do k = 1, 3
     do j = 1, 3
@@ -20,9 +21,11 @@ program test_3d_oob_dim3
   print *, "A(1,1,1) =", A(1, 1, 1)   ! EXPECTED: VALID (min corner)
   print *, "A(3,3,3) =", A(3, 3, 3)   ! EXPECTED: VALID (max corner)
   print *, "A(2,2,3) =", A(2, 2, 3)   ! EXPECTED: VALID (boundary depth)
-
-  print *, "Attempting A(2,2,4) — depth index 4 > upper bound 3..."
-  print *, "A(2,2,4) =", A(2, 2, 4)   ! EXPECTED: OOB ERROR at this line (dim3 index 4 > 3)
+  d1 = 2
+  d2 = 2
+  d3 = 4
+  print *, "Attempting A(d1,d2,d3) — depth index 4 > upper bound 3..."
+  print *, "A(d1,d2,d3) =", A(d1, d2, d3)   ! EXPECTED: OOB ERROR at this line (dim3 index 4 > 3)
 
   print *, "test_3d_oob_dim3: SHOULD NOT REACH HERE"
 end program test_3d_oob_dim3

@@ -3,7 +3,7 @@
 ! DESC: Nested subroutine calls. Outer passes slice A(2:9);
 !       inner subroutine passes a sub-slice S(2:7) further.
 !       Deep access is valid at all levels.
-! EXPECTED: All accesses VALID — no OOB error should occur.
+! EXPECTED: OOB ERROR at line 35 when loop reaches i=11 (index 7 > upper bound 6)
 ! ============================================================
 program test_nested_calls
   implicit none
@@ -31,6 +31,8 @@ contains
     integer, intent(in) :: Y(:)   ! size 6, indices 1..6
     print *, "inner: Y(1)=", Y(1), " Y(6)=", Y(6)   ! EXPECTED: VALID
     print *, "inner: Y(3)=", Y(3)                    ! EXPECTED: VALID
+    print *, "inner: Accessing OOB Y(7)..."
+    print *, "inner: Y(7)=", Y(7)                    ! EXPECTED: OOB ERROR
   end subroutine inner
 
 end program test_nested_calls

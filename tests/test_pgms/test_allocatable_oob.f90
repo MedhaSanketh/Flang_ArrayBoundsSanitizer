@@ -2,8 +2,7 @@
 ! FILE: test_allocatable_oob.f90
 ! DESC: Allocatable array A(5:15) accessed out of bounds.
 !       Tests that sanitizer respects custom lower bound.
-! EXPECTED: OOB ERROR at line 22 (index 4 < lower bound 5)
-!           OOB ERROR at line 27 (index 16 > upper bound 15)
+! EXPECTED: OOB ERROR at line 24 (index 4 < lower bound 5)
 ! ============================================================
 program test_allocatable_oob
   implicit none

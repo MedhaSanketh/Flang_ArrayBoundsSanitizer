@@ -2,7 +2,7 @@
 ! FILE: test_assumed_shape_oob.f90
 ! DESC: Assumed-shape dummy argument accessed out of bounds.
 !       Array of size 6 is passed; index 7 is accessed inside.
-! EXPECTED: OOB ERROR at line 30 (index 7 > upper bound 6)
+! EXPECTED: OOB ERROR at line 27 (index 7 > upper bound 6)
 ! ============================================================
 program test_assumed_shape_oob
   implicit none

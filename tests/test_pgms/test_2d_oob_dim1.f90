@@ -7,7 +7,7 @@
 program test_2d_oob_dim1
   implicit none
   integer :: A(4, 6)   ! valid: A(1:4, 1:6)
-  integer :: i, j
+  integer :: i, j, row, col
 
   do j = 1, 6
     do i = 1, 4
@@ -18,8 +18,11 @@ program test_2d_oob_dim1
   print *, "A(4,3) =", A(4, 3)   ! EXPECTED: VALID (boundary row)
   print *, "A(1,6) =", A(1, 6)   ! EXPECTED: VALID
 
-  print *, "Attempting A(5,3) — row 5 > upper bound 4..."
-  print *, "A(5,3) =", A(5, 3)   ! EXPECTED: OOB ERROR at this line (dim1 index 5 > 4)
+  integer :: row, col
+  row = 5
+  col = 3
+  print *, "Attempting A(row,col) — row 5 > upper bound 4..."
+  print *, "A(row,col) =", A(row, col)   ! EXPECTED: OOB ERROR at this line (dim1 index 5 > 4)
 
   print *, "test_2d_oob_dim1: SHOULD NOT REACH HERE"
 end program test_2d_oob_dim1

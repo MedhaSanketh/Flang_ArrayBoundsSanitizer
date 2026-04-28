@@ -3,7 +3,7 @@
 ! DESC: A slice A(2:5) (4 elements) is passed to a subroutine.
 !       The subroutine tries to access index 5, but the slice
 !       only has local indices 1..4.
-! EXPECTED: OOB ERROR at line 30 (index 5 > upper bound 4 of slice)
+! EXPECTED: OOB ERROR at line 29 (index 5 > upper bound 4 of slice)
 ! ============================================================
 program test_slice_complex
   implicit none

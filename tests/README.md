@@ -63,25 +63,52 @@ fortran_test_suite/
 
 ---
 
-## How to Compile
+## Setup Environment
+
+Create a `.env` file in the project root with the following variables (replace placeholders with your actual system paths):
 
 ```bash
-# With bounds checking enabled (Flang + sanitizer flag)
-flang-new -fbounds-check -o <binary> <file>.f90
+# .env template
+export FLANG="/path/to/your/llvm-project/build/bin/flang-new"
+export RUNTIME="/path/to/Flang_ArrayBoundsSanitizer/runtime/flang_bounds_check.o"
+export SDK="/path/to/your/MacOSX.sdk" (optional)
+export TESTS="/path/to/Flang_ArrayBoundsSanitizer/tests"
+```
 
-# Or using your custom sanitizer build:
-flang-new -fsanitize=array-bounds -O0 -o <binary> <file>.f90
+Then, load the environment variables:
 
-# Without sanitizer (baseline / reference)
-flang-new -O2 -o <binary> <file>.f90
+```bash
+# From the project root
+source .env
 ```
 
 ---
 
-## How to Run
+## How to Compile & Run
 
-./<binary>
-echo $?
+### **Run All Tests**
+
+Execute the automated test suite:
+
+```bash
+$TESTS/run_tests.sh $FLANG $RUNTIME
+```
+
+### **Run All Benchmarks**
+
+Execute the performance benchmarks:
+
+```bash
+$TESTS/run_benchmarks.sh $FLANG $RUNTIME
+```
+
+### **Run Individual Program**
+
+Compile and run a specific file with the HLFIR bounds sanitizer:
+
+```bash
+$FLANG -O0 -mllvm -bounds-check-hlfir -isysroot $SDK $TESTS/test_pgms/<NAME>.f90 $RUNTIME -o /tmp/bin && /tmp/bin
+```
 
 ---
 

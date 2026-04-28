@@ -2,7 +2,7 @@
 ! FILE: test_dynamic_bounds.f90
 ! DESC: Array size determined at runtime via command-line arg.
 !       Accesses index N+1 which is always OOB regardless of N.
-! EXPECTED: OOB ERROR when accessing index N+1 (> upper bound N)
+! EXPECTED: OOB ERROR at line 31 when accessing index N+1 (> upper bound N)
 ! ============================================================
 program test_dynamic_bounds
   implicit none

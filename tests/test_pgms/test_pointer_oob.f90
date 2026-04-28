@@ -2,7 +2,7 @@
 ! FILE: test_pointer_oob.f90
 ! DESC: Pointer P => A(3:7) (5 elements, local bounds 3..7).
 !       Access P(8) is beyond the pointer's upper bound of 7.
-! EXPECTED: OOB ERROR at line 25 (index 8 > upper bound 7)
+! EXPECTED: OOB ERROR at line 24 (index 8 > upper bound 7)
 ! ============================================================
 program test_pointer_oob
   implicit none
