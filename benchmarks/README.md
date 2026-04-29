@@ -35,10 +35,10 @@ python3 benchmarks/run_benchmarks.py --flang $FLANG --repeats 5
 ### Generated Artifacts
 
 - **`benchmarks/plots/`**: Directory containing 4 specialized metric plots for each benchmark program:
-  - `{bench}_mean_time.png`: Direct comparison of baseline vs. sanitized wall-clock time per phase.
-  - `{bench}_overhead_pct.png`: The percentage increase in execution time introduced by the sanitizer.
-  - `{bench}_slowdown_ratio.png`: The performance multiplier (e.g., 2.0x means the sanitized code is twice as slow).
-  - `{bench}_throughput.png`: Comparison of elements processed per second (Gelem/s) across different phases.
+  - `{bench}_mean_time.png`: Comparison of baseline vs. sanitized wall-clock time per phase.
+  - `{bench}_overhead_pct.png`: Percentage increase in execution time introduced by the sanitizer.
+  - `{bench}_slowdown_ratio.png`: Performance multiplier for sanitized code compared to baseline.
+  - `{bench}_throughput.png`: Comparison of elements processed per second across different phases.
 - **`benchmarks/benchmark_results.json`**: Raw timing data, metadata, and calculated metrics in JSON format.
 - **`benchmarks/benchmark_results.csv`**: Tabular summary of results per benchmark for easy spreadsheet import.
 
@@ -58,18 +58,6 @@ Each benchmark program (e.g., `bench1`, `bench2`) generates its own set of 4 plo
 2. **Sanitizer Overhead (%)**: Visualizes the relative slowdown for each phase. A value of 0% indicates no overhead, while values > 100% indicate significant performance impact.
 3. **Slowdown Ratio**: Provides a multiplicative view of overhead. A dashed horizontal line at 1.0x represents the "no overhead" baseline.
 4. **Throughput (Gelem/s)**: Measures how many "Giga-elements" (billions of array elements) are processed per second. This is useful for understanding the computational density of each phase.
-
-## Expected Overhead Ranges
-
-The following table lists typical overhead ranges based on array access patterns and optimization levels:
-
-| Array Type        | Pattern          | Expected Overhead | Rationale                                                             |
-| ----------------- | ---------------- | ----------------- | --------------------------------------------------------------------- |
-| **Static**        | Sequential       | 1.05x – 1.5x      | Bounds are known at compile time; checks are often folded or hoisted. |
-| **Allocatable**   | Standard (lb=1)  | 1.2x – 2.0x       | Requires runtime descriptor lookup but bounds are simple.             |
-| **Allocatable**   | Custom (lb!=1)   | 1.5x – 2.5x       | Custom lower bounds prevent simple zero-based indexing optimizations. |
-| **Assumed-Shape** | Few Large Calls  | 1.2x – 2.0x       | Descriptor setup cost is amortized over long loop execution.          |
-| **Assumed-Shape** | Many Small Calls | 2.0x – 4.0x       | Per-call descriptor preparation dominates the runtime.                |
 
 ## Interpreting OOB Detection Results
 

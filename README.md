@@ -89,10 +89,13 @@ clang -c runtime/flang_bounds_check.c -o flang_bounds_check.o
 - **tests/**
   Includes:
   - 20 correctness test cases
-  - 3 performance benchmarks
 
-- **docs/**
-  Design notes, explanations, and implementation details.
+- **benchmarks/**
+  - 3 performance benchmarks
+  - run_benchmarks.py: Script to run benchmarks
+  - benchmarks.json: Benchmark results in JSON format
+  - benchmarks.csv: Benchmark results in CSV format
+  - benchmarks.png: Benchmark results plot
 
 - **flang_bounds_check.patch**
   Patch file to be applied to the LLVM/Flang source tree.
