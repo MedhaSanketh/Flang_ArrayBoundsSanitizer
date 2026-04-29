@@ -2,7 +2,7 @@
 ! FILE: test_nested_calls.f90
 ! DESC: Nested subroutine calls. Outer passes slice A(2:9);
 !       inner subroutine passes a sub-slice S(2:7) further.
-!       Deep access is valid at all levels.
+!       Deep access is valid at all levels except last.
 ! EXPECTED: OOB ERROR at line 35 when loop reaches i=11 (index 7 > upper bound 6)
 ! ============================================================
 program test_nested_calls

@@ -47,18 +47,15 @@ fortran_test_suite/
 ├── test_2d_oob_dim1.f90           [14] 2D array, row index exceeds bound
 ├── test_3d_oob_dim3.f90           [15] 3D array, depth index exceeds bound
 │
+├── -- STRIDES --
+├── test_stride_valid.f90          [16] Stride array A(1:10:2), valid accesses
+├── test_stride_oob.f90            [17] Stride array A(1:10:2), index > upper bound
+│
 ├── -- EDGE CASES & COMPLEX SCENARIOS --
-├── test_loop_oob.f90              [16] Loop iterates N+1 times on N-element array
-├── test_nested_calls.f90          [17] Nested subroutines with slice threading
-├── test_mixed_alloc_slice_ptr.f90 [18] Allocatable + slice + pointer chain, OOB
-├── test_zero_length.f90           [19] Zero-length array, any access is OOB
+├── test_loop_assumed.f90          [18] Loop iterates over assumed shape array A(1:10:2)
+├── test_nested_calls.f90          [19] Nested subroutines with slice threading
 ├── test_dynamic_bounds.f90        [20] Runtime-determined N, accesses index N+1
 │
-├── bench_pgms/
-└── -- BENCHMARKS --
-    bench_large_static.f90         [B1] 100K static array: 100K valid reads, 1 OOB
-    bench_large_2d_alloc.f90       [B2] 1000x1000 allocatable: 1M valid, 1 OOB
-    bench_assumed_shape_stress.f90 [B3] 50K elem, 3-layer subroutine chain, OOB at leaf
 ```
 
 ---
@@ -92,14 +89,6 @@ Execute the automated test suite:
 
 ```bash
 $TESTS/run_tests.sh $FLANG $RUNTIME
-```
-
-### **Run All Benchmarks**
-
-Execute the performance benchmarks:
-
-```bash
-$TESTS/run_benchmarks.sh $FLANG $RUNTIME
 ```
 
 ### **Run Individual Program**
