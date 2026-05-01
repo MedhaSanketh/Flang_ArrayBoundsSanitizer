@@ -1,3 +1,45 @@
+diff --git a/clang/include/clang/Options/Options.td b/clang/include/clang/Options/Options.td
+index 46e97256a..b12ddfc78 100644
+--- a/clang/include/clang/Options/Options.td
++++ b/clang/include/clang/Options/Options.td
+@@ -7720,6 +7720,11 @@ defm safe_trampoline : BoolOptionWithoutMarshalling<"f",
+   PosFlag<SetTrue, [], [FlangOption], "Use W^X compliant runtime trampoline pool for internal procedures">,
+   NegFlag<SetFalse, [], [FlangOption], "Use stack-based trampolines for internal procedures (default, may require executable stack)">>;
+ 
++
++defm check_bounds : BoolOptionWithoutMarshalling<"f", "check=bounds",
++  PosFlag<SetTrue, [], [FlangOption, FC1Option], "Enable runtime array bounds checking">,
++  NegFlag<SetFalse, [], [FlangOption, FC1Option], "Disable runtime array bounds checking (default)">>;
++
+ defm loop_versioning : BoolOptionWithoutMarshalling<"f", "version-loops-for-stride",
+   PosFlag<SetTrue, [], [ClangOption], "Create unit-strided versions of loops">,
+    NegFlag<SetFalse, [], [ClangOption], "Do not create unit-strided loops (default)">>;
+diff --git a/clang/lib/Driver/ToolChains/Flang.cpp b/clang/lib/Driver/ToolChains/Flang.cpp
+index ce503b742..ca11b2e05 100644
+--- a/clang/lib/Driver/ToolChains/Flang.cpp
++++ b/clang/lib/Driver/ToolChains/Flang.cpp
+@@ -218,6 +218,9 @@ void Flang::addCodegenOptions(const ArgList &Args,
+           << "-fsafe-trampoline" << T.str();
+     }
+   }
++  if (Args.hasFlag(options::OPT_fcheck_bounds,
++                   options::OPT_fno_check_bounds, false))
++    CmdArgs.push_back("-fcheck=bounds");
+ 
+   // -fno-protect-parens is the default for -Ofast.
+   if (!Args.hasFlag(options::OPT_fprotect_parens,
+diff --git a/flang/include/flang/Frontend/CodeGenOptions.def b/flang/include/flang/Frontend/CodeGenOptions.def
+index 17b8e6164..f3bb78c59 100644
+--- a/flang/include/flang/Frontend/CodeGenOptions.def
++++ b/flang/include/flang/Frontend/CodeGenOptions.def
+@@ -44,6 +44,7 @@ CODEGENOPT(PrepareForThinLTO , 1, 0) ///< Set when -flto=thin is enabled on the
+                                      ///< compile step.
+ CODEGENOPT(ProtectParens, 1, 1) ///< -fprotect-parens (enable parenthesis protection)
+ CODEGENOPT(StackArrays, 1, 0) ///< -fstack-arrays (enable the stack-arrays pass)
++CODEGENOPT(BoundsCheck, 1, 0) ///< -fcheck=bounds (enable runtime bounds checking)
+ CODEGENOPT(EnableSafeTrampoline, 1, 0) ///< -fsafe-trampoline (W^X compliant trampoline pool)
+ CODEGENOPT(VectorizeLoop, 1, 0) ///< Enable loop vectorization.
+ CODEGENOPT(VectorizeSLP, 1, 0) ///< Enable SLP vectorization.
 diff --git a/flang/include/flang/Optimizer/HLFIR/Passes.td b/flang/include/flang/Optimizer/HLFIR/Passes.td
 index dbce6c3c4..73ce64649 100644
 --- a/flang/include/flang/Optimizer/HLFIR/Passes.td
@@ -38,10 +80,18 @@ index 04eca81da..bd7cedc01 100644
  struct OpenMPFIRPassPipelineOpts {
    /// Whether code is being generated for a target device rather than the host
 diff --git a/flang/include/flang/Tools/CrossToolHelpers.h b/flang/include/flang/Tools/CrossToolHelpers.h
-index 6240354bd..4a37c608b 100644
+index 6240354bd..00677f8e7 100644
 --- a/flang/include/flang/Tools/CrossToolHelpers.h
 +++ b/flang/include/flang/Tools/CrossToolHelpers.h
-@@ -118,6 +118,7 @@ struct MLIRToLLVMPassPipelineConfig : public FlangEPCallBacks {
+@@ -89,6 +89,7 @@ struct MLIRToLLVMPassPipelineConfig : public FlangEPCallBacks {
+       const Fortran::common::MathOptionsBase &mathOpts) {
+     OptLevel = level;
+     StackArrays = opts.StackArrays;
++    EnableBoundsCheck = opts.BoundsCheck;
+     EnableSafeTrampoline = opts.EnableSafeTrampoline;
+     Underscoring = opts.Underscoring;
+     LoopVersioning = opts.LoopVersioning;
+@@ -118,6 +119,7 @@ struct MLIRToLLVMPassPipelineConfig : public FlangEPCallBacks {
    }
  
    llvm::OptimizationLevel OptLevel; ///< optimisation level
@@ -49,45 +99,44 @@ index 6240354bd..4a37c608b 100644
    bool StackArrays = false; ///< convert memory allocations to alloca.
    bool EnableSafeTrampoline{false}; ///< Use runtime trampoline pool (W^X).
    bool Underscoring = true; ///< add underscores to function names.
+diff --git a/flang/lib/Frontend/CompilerInvocation.cpp b/flang/lib/Frontend/CompilerInvocation.cpp
+index fab1b7921..0f417e93e 100644
+--- a/flang/lib/Frontend/CompilerInvocation.cpp
++++ b/flang/lib/Frontend/CompilerInvocation.cpp
+@@ -292,6 +292,10 @@ static void parseCodeGenArgs(Fortran::frontend::CodeGenOptions &opts,
+                    clang::options::OPT_fno_stack_arrays, false))
+     opts.StackArrays = 1;
+ 
++  if (args.hasFlag(clang::options::OPT_fcheck_bounds,
++                   clang::options::OPT_fno_check_bounds, false))
++    opts.BoundsCheck = 1;
++
+   if (args.hasFlag(clang::options::OPT_fsafe_trampoline,
+                    clang::options::OPT_fno_safe_trampoline, false))
+     opts.EnableSafeTrampoline = 1;
 diff --git a/flang/lib/Frontend/FrontendActions.cpp b/flang/lib/Frontend/FrontendActions.cpp
-index 4e058786a..fb2c63068 100644
+index 4e058786a..1ad8e0d06 100644
 --- a/flang/lib/Frontend/FrontendActions.cpp
 +++ b/flang/lib/Frontend/FrontendActions.cpp
-@@ -20,6 +20,13 @@
+@@ -20,6 +20,9 @@
  #include "flang/Optimizer/Dialect/Support/FIRContext.h"
  #include "flang/Optimizer/Dialect/Support/KindMapping.h"
  #include "flang/Optimizer/Passes/Pipelines.h"
 +
-+static llvm::cl::opt<bool> enableBoundsCheckFlag(
-+    "bounds-check-hlfir",
-+    llvm::cl::desc("Enable runtime bounds checking"),
-+    llvm::cl::init(false));
 +#include "llvm/Support/CommandLine.h"
 +
  #include "flang/Optimizer/Support/DataLayout.h"
  #include "flang/Optimizer/Support/InitFIR.h"
  #include "flang/Optimizer/Support/Utils.h"
-@@ -637,10 +644,11 @@ void CodeGenAction::lowerHLFIRToFIR() {
-   if (ci.getInvocation().getLangOpts().OpenMPSimd)
-     enableOpenMP = fir::EnableOpenMP::Simd;
-   MLIRToLLVMPassPipelineConfig config(level);
-+  config.EnableBoundsCheck = (bool)enableBoundsCheckFlag;
+@@ -640,7 +643,7 @@ void CodeGenAction::lowerHLFIRToFIR() {
    config.fpMaxminBehavior =
        ci.getInvocation().getLoweringOpts().getFPMaxminBehavior();
    // Create the pass pipeline
 -  fir::createHLFIRToFIRPassPipeline(pm, enableOpenMP, config);
-+  fir::createHLFIRToFIRPassPipeline(pm, (bool)enableBoundsCheckFlag, enableOpenMP, config);
++  fir::createHLFIRToFIRPassPipeline(pm, config.EnableBoundsCheck, enableOpenMP, config);
    (void)mlir::applyPassManagerCLOptions(pm);
  
    mlir::TimingScope timingScopeMLIRPasses = timingScopeRoot.nest(
-@@ -752,6 +760,7 @@ void CodeGenAction::generateLLVMIR() {
-   pm.enableVerifier(/*verifyPasses=*/true);
- 
-   MLIRToLLVMPassPipelineConfig config(level, opts, mathOpts);
-+  config.EnableBoundsCheck = (bool)enableBoundsCheckFlag;
-   config.fpMaxminBehavior = invoc.getLoweringOpts().getFPMaxminBehavior();
-   llvm::Triple pipelineTriple(invoc.getTargetOpts().triple);
-   config.SkipConvertComplexPow = pipelineTriple.isAMDGCN();
 diff --git a/flang/lib/Optimizer/HLFIR/Transforms/CMakeLists.txt b/flang/lib/Optimizer/HLFIR/Transforms/CMakeLists.txt
 index 5c24fe58b..22313d1e5 100644
 --- a/flang/lib/Optimizer/HLFIR/Transforms/CMakeLists.txt

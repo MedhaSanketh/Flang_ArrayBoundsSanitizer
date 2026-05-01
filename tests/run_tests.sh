@@ -11,7 +11,7 @@ for f in test_pgms/*.f90; do
   name=$(basename $f .f90)
 
   # Compile
-  $FLANG -O0 -mllvm -bounds-check-hlfir \
+  $FLANG -O0 -fcheck=bounds \
     $f $RUNTIME -o /tmp/test_bin 2>/dev/null
   if [ $? -ne 0 ]; then
     echo "COMPILE ERROR: $name"
