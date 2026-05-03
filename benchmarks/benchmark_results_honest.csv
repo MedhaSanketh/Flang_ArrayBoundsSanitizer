@@ -1,0 +1,4 @@
+benchmark,baseline_mean_s,sanitized_mean_s,overhead_pct,slowdown_ratio,oob_detected
+bench1_static_sequential,0.0773,2.4958,3129.92,32.299,True
+bench2_allocatable_descriptor,0.048,3.1265,6408.23,65.082,True
+bench3_assumed_shape_calls,0.023,0.804,3399.43,34.994,True

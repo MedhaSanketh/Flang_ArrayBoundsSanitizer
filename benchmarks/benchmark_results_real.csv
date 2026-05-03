@@ -1,0 +1,4 @@
+benchmark,baseline_s,sanitized_s,overhead_pct,slowdown_ratio,note
+bench1_static_sequential,0.09,2.61,2800,29.0,static 40M elem x10 reps unconditional call per access
+bench2_allocatable_descriptor,0.06,3.29,5383,54.8,allocatable 20M elem x10 reps unconditional call per access
+bench3_assumed_shape_calls,0.04,0.84,2000,21.0,assumed-shape 15M elem x10 reps unconditional call per access

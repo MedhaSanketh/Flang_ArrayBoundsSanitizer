@@ -1,0 +1,14 @@
+# Compiled binaries
+benchmarks/*_base
+benchmarks/*_san
+benchmarks/bench1_base
+benchmarks/bench2_base
+benchmarks/bench3_base
+benchmarks/bench1_san
+benchmarks/bench2_san
+benchmarks/bench3_san
+benchmarks/*_noob_base
+benchmarks/*_noob_san
+
+# Intermediate files
+benchmarks/*_noob.f90

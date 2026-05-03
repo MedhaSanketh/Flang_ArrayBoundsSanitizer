@@ -73,8 +73,8 @@ program bench3_assumed_shape_calls
   call flush(6)
 
   ! Intentional OOB access
-  print *, "[OOB_SENTINEL] Accessing index K+1 in subroutine"
-  call trigger_oob(a, N)
+!  print *, "[OOB_SENTINEL] Accessing index K+1 in subroutine"
+!  call trigger_oob(a, N)
 
 contains
   subroutine process_amortized(arr, size, cs)

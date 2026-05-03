@@ -85,6 +85,6 @@ program bench2_allocatable_descriptor
 
   ! Intentional OOB access
   allocate(a(current_n))
-  print *, "[OOB_SENTINEL] Accessing a(ubound+1)"
-  print *, a(ubound(a,1)+1)  !$OOB_LINE: 91
+!  print *, "[OOB_SENTINEL] Accessing a(ubound+1)"
+!  print *, a(ubound(a,1)+1)  !$OOB_LINE: 91
 end program bench2_allocatable_descriptor

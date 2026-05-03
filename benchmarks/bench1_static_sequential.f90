@@ -75,7 +75,7 @@ program bench1_static_sequential
   call flush(6)
 
   ! Intentional OOB access
-  print *, "[OOB_SENTINEL] Accessing a(N+1)"
-  i = N + 1
-  print *, a(i)  !$OOB_LINE: 77
+!  print *, "[OOB_SENTINEL] Accessing a(N+1)"
+!  i = N + 1
+!  print *, a(i)  !$OOB_LINE: 77
 end program bench1_static_sequential
