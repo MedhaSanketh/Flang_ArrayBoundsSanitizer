@@ -5,8 +5,8 @@ Exploits HLFIR's rich array descriptor metadata to insert precise bounds checks
 for allocatable arrays, assumed-shape arrays, array slices, and pointer arrays.
 
 ## Authors
-- Medha Sanketh — Compiler pass, pipeline integration, driver flag
-- Divye Belumana — Runtime library, test suite, benchmarks
+- Medha Sanketh 
+- Kalianpur Rohith
 
 ## What It Does
 
@@ -72,13 +72,13 @@ flang -O2 your_program.f90 -o your_program
 
 | Case | Description | Status |
 |------|-------------|--------|
-| Allocatable arrays | Runtime bounds via descriptor | ✅ |
-| Assumed-shape arrays | Caller-provided bounds | ✅ |
-| Array slices | Transformed bounds | ✅ |
-| Pointer arrays | Dynamic target bounds | ✅ |
-| Static arrays | Compile-time known bounds | ✅ |
-| 2D/3D arrays | Per-dimension bounds checking | ✅ |
-| Strided slices | Non-unit stride access | ✅ |
+| Allocatable arrays | Runtime bounds via descriptor | done |
+| Assumed-shape arrays | Caller-provided bounds | done |
+| Array slices | Transformed bounds | done |
+| Pointer arrays | Dynamic target bounds | done |
+| Static arrays | Compile-time known bounds | done |
+| 2D/3D arrays | Per-dimension bounds checking | done |
+| Strided slices | Non-unit stride access | done |
 
 ## Test Results
 
