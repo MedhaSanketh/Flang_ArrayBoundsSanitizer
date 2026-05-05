@@ -4,19 +4,24 @@ A runtime bounds-checking sanitizer for Fortran programs compiled with Flang.
 Exploits HLFIR's rich array descriptor metadata to insert precise bounds checks
 for allocatable arrays, assumed-shape arrays, array slices, and pointer arrays.
 
+## Authors
+- Medha Sanketh — Compiler pass, pipeline integration, driver flag
+- Divye Belumana — Runtime library, test suite, benchmarks
+
 ## What It Does
 
-Inserts calls to `__flang_bounds_check()` before every descriptor-based array
-access in Fortran programs. The runtime function checks if the index is within
-bounds and aborts with a diagnostic if not.
+Inserts a conditional bounds check before every array access during
+HLFIR-to-FIR lowering. When an out-of-bounds access is detected at runtime,
+the program aborts with a diagnostic message showing the index, valid range,
+and source line number.
 
 ## Example Output
 
 ```text
 *** Fortran Array Bounds Violation ***
-Index:       20
-Valid range: [5 : 15]
-Line:        10
+  Index:       20
+  Valid range: [5 : 15]
+  Line:        10
 ```
 
 ## How to Apply to a Fresh LLVM Checkout
@@ -50,11 +55,7 @@ ninja -j8 flang
 clang -c runtime/flang_bounds_check.c -o flang_bounds_check.o
 
 # Compile Fortran program with bounds checking
-./build/bin/flang -O0 \
-  -mllvm -bounds-check-hlfir \
-  your_program.f90 \
-  flang_bounds_check.o \
-  -o your_program
+flang -fcheck=bounds your_program.f90 flang_bounds_check.o -o your_program
 
 # Run
 ./your_program
@@ -63,20 +64,47 @@ clang -c runtime/flang_bounds_check.c -o flang_bounds_check.o
 ## Without Bounds Checking (baseline)
 
 ```bash
-./build/bin/flang -O2 your_program.f90 -o your_program
+flang -O2 your_program.f90 -o your_program
 ./your_program
 ```
 
 ## Covered Cases
 
-| Case                 | Description                   |
-| -------------------- | ----------------------------- |
-| Allocatable arrays   | Runtime bounds via descriptor |
-| Assumed-shape arrays | Caller-provided bounds        |
-| Array slices         | Transformed bounds            |
-| Pointer arrays       | Dynamic target bounds         |
-| 2D/3D arrays         | Multi-dimensional             |
-| Stride case          | Non-unit array access         |
+| Case | Description | Status |
+|------|-------------|--------|
+| Allocatable arrays | Runtime bounds via descriptor | ✅ |
+| Assumed-shape arrays | Caller-provided bounds | ✅ |
+| Array slices | Transformed bounds | ✅ |
+| Pointer arrays | Dynamic target bounds | ✅ |
+| Static arrays | Compile-time known bounds | ✅ |
+| 2D/3D arrays | Per-dimension bounds checking | ✅ |
+| Strided slices | Non-unit stride access | ✅ |
+
+## Test Results
+
+20/20 correctness tests passing, 0 false positives.
+
+```bash
+cd tests
+./run_tests.sh /path/to/flang /path/to/flang_bounds_check.o
+```
+
+## Performance Overhead
+
+Benchmarks run on Apple M1, Flang 23.0.0.
+Baseline: `-O2`, Sanitized: `-fcheck=bounds`.
+
+| Benchmark | Baseline | Sanitized | Slowdown |
+|-----------|----------|-----------|----------|
+| bench1 static sequential | 0.09s | 1.91s | 21x |
+| bench2 allocatable descriptor | 0.04s | 2.91s | 73x |
+| bench3 assumed-shape calls | 0.02s | 0.71s | 35x |
+
+Overhead comes from a conditional branch to `__flang_bounds_fail`
+(a `noreturn` function) before every array access. CSE correctly
+caches descriptor reads so bounds are not re-read per iteration.
+Loop hoisting (checking once before the loop instead of per-iteration)
+would reduce overhead to ~2-5x and is left as future work.
 
 ## Project Structure
 
@@ -84,18 +112,19 @@ clang -c runtime/flang_bounds_check.c -o flang_bounds_check.o
   Contains the HLFIR instrumentation pass implementation.
 
 - **runtime/**
-  C-based runtime library used for bounds checking support.
+  C-based runtime library (`__flang_bounds_check`, `__flang_bounds_fail`).
 
 - **tests/**
   Includes:
   - 20 correctness test cases
+  - `run_tests.sh` — automated test runner
 
 - **benchmarks/**
   - 3 performance benchmarks
-  - run_benchmarks.py: Script to run benchmarks
-  - benchmarks.json: Benchmark results in JSON format
-  - benchmarks.csv: Benchmark results in CSV format
-  - benchmarks.png: Benchmark results plot
+  - `run_benchmarks_honest.py` — real measurement script
+  - `benchmark_results_real.csv` — real overhead measurements
+  - `benchmark_results.csv` — original results (kept for reference)
+  - `plots/` — visualization of benchmark results
 
 - **flang_bounds_check.patch**
   Patch file to be applied to the LLVM/Flang source tree.
