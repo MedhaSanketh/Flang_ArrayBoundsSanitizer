@@ -8,6 +8,62 @@ for allocatable arrays, assumed-shape arrays, array slices, and pointer arrays.
 - Medha Sanketh 
 - Kalianpur Rohith
 
+## Background & Motivation
+
+Fortran remains the dominant language in high-performance scientific computing —
+weather simulation, aerospace, numerical physics — where array operations are
+the core computation. Out-of-bounds array accesses are a common source of silent
+data corruption and hard-to-debug crashes in these programs.
+
+### The Problem with Existing Tools
+
+`gfortran -fcheck=bounds` exists but is fundamentally limited:
+
+| Limitation | Why it happens |
+|------------|----------------|
+| Misses assumed-shape arrays | Bounds are only known at runtime via descriptor |
+| Misses array slices | Slice remaps bounds — checker uses wrong range |
+| Misses pointer arrays | Pointer target changes at runtime |
+| No custom lower bounds | Assumes lb=1, wrong for `allocate(A(5:15))` |
+| No multi-dim checking | Only checks first dimension |
+
+The root cause: gfortran's checker runs late in compilation when rich
+array metadata is already lost. It sees raw pointers, not Fortran arrays.
+
+### Why HLFIR Changes Everything
+
+Flang's HLFIR (High-Level Fortran IR) is a relatively new intermediate
+representation that preserves Fortran array semantics much longer in the
+compilation pipeline. At the HLFIR level:
+
+- Every array access is an `hlfir.designate` operation
+- Every dynamic array carries a descriptor (`fir.box`) with lb, extent, stride
+- Slice transformations are explicit and trackable
+- Pointer reassignments update the descriptor in place
+
+This means a pass at the HLFIR level can read the **exact** bounds for any
+array access — static, dynamic, sliced, or pointer-based — and insert a
+precise check before it reaches machine code.
+
+### Objective
+
+Build a sanitizer that:
+1. Runs during HLFIR-to-FIR lowering (before array metadata is lost)
+2. Reads bounds from descriptors at runtime for dynamic arrays
+3. Reads bounds from types at compile time for static arrays
+4. Covers all cases gfortran misses
+5. Is controlled by a standard `-fcheck=bounds` compiler flag
+
+## Deliverables
+
+| # | Deliverable | Status |
+|---|-------------|--------|
+| 1 | HLFIR instrumentation pass (`HLFIRBoundsCheck.cpp`) |  Complete |
+| 2 | Runtime support library (`flang_bounds_check.c`) |  Complete |
+| 3 | Driver flag `-fcheck=bounds` |  Complete |
+| 4 | Test suite - 20 Fortran programs with OOB accesses |  20/20 passing |
+| 5 | Overhead benchmarks on 3 real Fortran programs |  Complete |
+
 ## What It Does
 
 Inserts a conditional bounds check before every array access during
