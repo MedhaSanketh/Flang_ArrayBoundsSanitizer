@@ -6,6 +6,7 @@ Fortran array out-of-bounds (OOB) accesses compile silently under `-O2`.
 Existing tools miss critical cases:
 
 | Tool | Misses |
+|------|--------|
 | `gfortran -fbounds-check` | Slice-relative bounds, custom lb, pointer retargets |
 | AddressSanitizer | Fortran array semantics entirely |
 | Valgrind | Semantic violations (sees raw memory, not arrays) |
