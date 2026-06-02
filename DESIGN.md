@@ -1,4 +1,4 @@
-# Design Document — Flang HLFIR-Aware Array Bounds Sanitizer
+# Design Document: Flang HLFIR-Aware Array Bounds Sanitizer
 
 ## Problem Statement
 
@@ -6,7 +6,6 @@ Fortran array out-of-bounds (OOB) accesses compile silently under `-O2`.
 Existing tools miss critical cases:
 
 | Tool | Misses |
-|------|--------|
 | `gfortran -fbounds-check` | Slice-relative bounds, custom lb, pointer retargets |
 | AddressSanitizer | Fortran array semantics entirely |
 | Valgrind | Semantic violations (sees raw memory, not arrays) |
@@ -73,7 +72,7 @@ flag registration pattern (see IMPLEMENTATION.md for details).
 
 ## Known Limitations
 
-- **Overhead**: 21-73x on tight loops due to per-access branch cost.
+- **Overhead**: 21x on tight loops due to per-access branch cost.
   Fix: loop hoisting (future work, requires value range analysis).
 - **Coarrays**: not supported.
 - **Allocatable components of derived types**: not supported.
