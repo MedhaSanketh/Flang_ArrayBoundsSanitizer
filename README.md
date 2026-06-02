@@ -1,198 +1,434 @@
 # Flang HLFIR-Aware Array Bounds Sanitizer
 
-A runtime bounds-checking sanitizer for Fortran programs compiled with Flang.
-Exploits HLFIR's rich array descriptor metadata to insert precise bounds checks
-for allocatable arrays, assumed-shape arrays, array slices, and pointer arrays.
+A compiler-based runtime bounds-checking sanitizer for Fortran programs compiled
+with Flang. Implemented as an MLIR pass at the HLFIR level — the only point in
+the compilation pipeline where full array descriptor metadata is still available.
 
-## Authors
-- Medha Sanketh 
-- Kalianpur Rohith
+**Authors:** Medha Sanketh · Kalianpur Rohith  
+**Target:** Apple M1 (arm64-apple-darwin), Flang 23.0.0, LLVM 23 monorepo  
+**Status:** 20/20 tests passing · 0 false positives · 21–73× overhead (no loop hoisting)
 
-## Background & Motivation
+---
 
-Fortran remains the dominant language in high-performance scientific computing —
-weather simulation, aerospace, numerical physics — where array operations are
-the core computation. Out-of-bounds array accesses are a common source of silent
-data corruption and hard-to-debug crashes in these programs.
+## Table of Contents
 
-### The Problem with Existing Tools
+1. [The Problem](#the-problem)
+2. [Why HLFIR?](#why-hlfir)
+3. [Solution Design](#solution-design)
+4. [Implementation](#implementation)
+5. [Quick Start](#quick-start)
+6. [Build from Source](#build-from-source)
+7. [Running Tests](#running-tests)
+8. [Benchmarks](#benchmarks)
+9. [Demo](#demo)
+10. [Project Structure](#project-structure)
+11. [Known Limitations](#known-limitations)
 
-`gfortran -fcheck=bounds` exists but is fundamentally limited:
+---
 
-| Limitation | Why it happens |
-|------------|----------------|
-| Misses assumed-shape arrays | Bounds are only known at runtime via descriptor |
-| Misses array slices | Slice remaps bounds — checker uses wrong range |
-| Misses pointer arrays | Pointer target changes at runtime |
-| No custom lower bounds | Assumes lb=1, wrong for `allocate(A(5:15))` |
-| No multi-dim checking | Only checks first dimension |
+## The Problem
 
-The root cause: gfortran's checker runs late in compilation when rich
-array metadata is already lost. It sees raw pointers, not Fortran arrays.
+Fortran dominates high-performance scientific computing — weather simulation,
+aerospace, numerical physics. Array operations are the core computation, and
+**out-of-bounds array accesses are one of the most common sources of silent
+data corruption and hard-to-debug crashes** in these programs.
 
-### Why HLFIR Changes Everything
+Existing tools all fall short:
 
-Flang's HLFIR (High-Level Fortran IR) is a relatively new intermediate
+| Tool | What it misses | Root cause |
+|------|---------------|------------|
+| `gfortran -fcheck=bounds` | Assumed-shape, array slices, custom lower bounds, multi-dim | Runs too late — descriptor metadata already lost |
+| AddressSanitizer | All Fortran array semantics | Operates on raw memory, not Fortran arrays |
+| Valgrind Memcheck | Semantic violations (valid address, wrong element) | Same — sees bytes, not Fortran bounds |
+| Static analysis | Dynamic cases (allocatable, assumed-shape, pointer) | Cannot resolve runtime values |
+
+The core failure: by the time these tools run, the Fortran array has been
+lowered to raw pointer arithmetic. The rich metadata — lower bounds, extents,
+slice offsets, pointer targets — is gone.
+
+---
+
+## Why HLFIR?
+
+Flang's **HLFIR (High-Level Fortran IR)** is a relatively new intermediate
 representation that preserves Fortran array semantics much longer in the
-compilation pipeline. At the HLFIR level:
+compilation pipeline than any prior IR.
 
-- Every array access is an `hlfir.designate` operation
-- Every dynamic array carries a descriptor (`fir.box`) with lb, extent, stride
-- Slice transformations are explicit and trackable
-- Pointer reassignments update the descriptor in place
+At the HLFIR level, before lowering to FIR/LLVM IR:
 
-This means a pass at the HLFIR level can read the **exact** bounds for any
-array access — static, dynamic, sliced, or pointer-based — and insert a
-precise check before it reaches machine code.
+| IR concept | What it means for bounds checking |
+|------------|----------------------------------|
+| `hlfir.designate` | Every array element access is an explicit, typed operation |
+| `fir.box` | Every dynamic array carries a descriptor: lower bound, extent, stride per dimension |
+| Slice operations | Transformed bounds are explicit — `A(3:8)` passed as assumed-shape has `lb=1, extent=6` in the callee's descriptor |
+| Pointer reassignment | `P => SMALL(1:5)` updates the descriptor — the next access reads the new bounds |
 
-### Objective
+**Once the compiler lowers past HLFIR to FIR, all of this dissolves into raw
+pointer arithmetic.** HLFIR is the only level where precise, complete bounds
+checking is possible.
 
-Build a sanitizer that:
-1. Runs during HLFIR-to-FIR lowering (before array metadata is lost)
-2. Reads bounds from descriptors at runtime for dynamic arrays
-3. Reads bounds from types at compile time for static arrays
-4. Covers all cases gfortran misses
-5. Is controlled by a standard `-fcheck=bounds` compiler flag
+---
 
-## Deliverables
+## Solution Design
 
-| # | Deliverable | Status |
-|---|-------------|--------|
-| 1 | HLFIR instrumentation pass (`HLFIRBoundsCheck.cpp`) |  Complete |
-| 2 | Runtime support library (`flang_bounds_check.c`) |  Complete |
-| 3 | Driver flag `-fcheck=bounds` |  Complete |
-| 4 | Test suite - 20 Fortran programs with OOB accesses |  20/20 passing |
-| 5 | Overhead benchmarks on 3 real Fortran programs |  Complete |
+An MLIR `OperationPass<ModuleOp>` walks every `hlfir::DesignateOp` (array
+element access) and inserts a `fir.if` conditional before it. If the index
+is out of bounds, the `if` body calls `__flang_bounds_fail` — a `noreturn` C
+function that prints a diagnostic and aborts.
 
-## What It Does
+### Two code paths
 
-Inserts a conditional bounds check before every array access during
-HLFIR-to-FIR lowering. When an out-of-bounds access is detected at runtime,
-the program aborts with a diagnostic message showing the index, valid range,
-and source line number.
-
-## Example Output
-
-```text
-*** Fortran Array Bounds Violation ***
-  Index:       20
-  Valid range: [5 : 15]
-  Line:        10
+**Path A — Descriptor-based** (allocatable, assumed-shape, pointer arrays):
+```
+fir.box_dims(box, dim)  →  (lb, extent, stride)
+ub = lb + extent - 1
+if (index < lb OR index > ub)  →  call __flang_bounds_fail(index, lb, ub, line)
 ```
 
-## How to Apply to a Fresh LLVM Checkout
+**Path B — Static arrays** (compile-time known bounds):
+```
+Read shape from FIR SequenceType at compile time
+lb = 1 (always for static),  ub = shape[dim]
+if (index < lb OR index > ub)  →  call __flang_bounds_fail(index, lb, ub, line)
+```
+
+### Why `noreturn`?
+
+`__flang_bounds_fail` is declared `noreturn` in C and tagged `llvm.noreturn`
+in IR. This prevents LLVM's optimizer from treating the `fir.if` body as dead
+code even when bounds appear provably safe — ensuring every check survives the
+full optimization pipeline.
+
+### Driver flag: `-fcheck=bounds`
+
+The flag is wired end-to-end through 5 layers of the compiler driver:
+
+```
+User: flang -fcheck=bounds program.f90
+        ↓
+Options.td          →  flag defined, visible in --help
+        ↓
+Flang.cpp           →  driver forwards -fcheck=bounds to fc1 (Flang frontend)
+        ↓
+CompilerInvocation  →  opts.BoundsCheck = 1
+        ↓
+CrossToolHelpers.h  →  config.EnableBoundsCheck = opts.BoundsCheck
+        ↓
+Pipelines.cpp       →  if enableBoundsCheck → pm.addPass(createHLFIRBoundsCheck())
+```
+
+The pass runs immediately before `hlfir::createConvertHLFIRtoFIR()` — the last
+possible moment before descriptor information is lost.
+
+### HLFIR before and after the pass
+
+**Before:**
+```mlir
+%c20 = arith.constant 20 : index
+%16  = hlfir.designate %box (%c20)   ← no check
+```
+
+**After:**
+```mlir
+%dims = fir.box_dims %box, %c0       ← read lb, extent from descriptor
+%lb   = %dims#0
+%ub   = %lb + %dims#1 - 1
+fir.if %outOfBounds {
+    call @__flang_bounds_fail(%idx, %lb, %ub, %line)   ← noreturn
+}
+%16  = hlfir.designate %box (%c20)   ← original access unchanged
+```
+
+---
+
+## Implementation
+
+The sanitizer touches **11 files** in the LLVM/Flang source tree, all captured
+in `flang_bounds_check.patch`. Reference copies of the key files are in `src/`
+and `pass/`.
+
+| File | Change |
+|------|--------|
+| `flang/lib/Optimizer/HLFIR/Transforms/HLFIRBoundsCheck.cpp` | **New** — the MLIR pass |
+| `flang/include/flang/Optimizer/HLFIR/Passes.td` | Pass registration (TableGen) |
+| `flang/lib/Optimizer/HLFIR/Transforms/CMakeLists.txt` | Build system entry |
+| `flang/include/flang/Optimizer/Passes/Pipelines.h` | Pipeline signature |
+| `flang/lib/Optimizer/Passes/Pipelines.cpp` | Pass insertion point |
+| `flang/include/flang/Tools/CrossToolHelpers.h` | Config struct field |
+| `flang/include/flang/Frontend/CodeGenOptions.def` | `BoundsCheck` option |
+| `flang/lib/Frontend/CompilerInvocation.cpp` | Flag processing |
+| `flang/lib/Frontend/FrontendActions.cpp` | Pipeline activation |
+| `clang/include/clang/Options/Options.td` | `-fcheck=bounds` flag definition |
+| `clang/lib/Driver/ToolChains/Flang.cpp` | Flag forwarding to fc1 |
+
+The runtime library (`runtime/flang_bounds_check.c`) provides two functions:
+
+```c
+// Error path only — noreturn, never called on the fast path
+__attribute__((noreturn))
+void __flang_bounds_fail(long index, long lb, long ub, long line);
+
+// Wrapper for unconditional-call path (kept for compatibility)
+void __flang_bounds_check(long index, long lb, long ub, long line);
+```
+
+---
+
+## Quick Start
+
+If you already have a patched Flang build at `~/llvm-project/build/bin/flang`:
 
 ```bash
-# Clone LLVM
+# Clone this repo
+git clone <repo-url>
+cd flang-bounds-sanitizer
+
+# Run the full demo + test suite
+./run.sh
+```
+
+`run.sh` compiles the runtime library, runs a live demo showing OOB detection,
+then runs all 20 correctness tests.
+
+---
+
+## Build from Source
+
+Apply the patch to a fresh LLVM checkout, then build Flang:
+
+```bash
+# 1. Clone LLVM
 git clone --depth=1 https://github.com/llvm/llvm-project.git
 cd llvm-project
 
-# Apply the patch
-git apply /path/to/flang_bounds_check.patch
+# 2. Apply the patch
+git apply /path/to/flang-bounds-sanitizer/flang_bounds_check.patch
 
-# Build
-mkdir build && cd build
-cmake ../llvm \
-  -G Ninja \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DLLVM_ENABLE_PROJECTS="clang;flang;mlir" \
-  -DLLVM_TARGETS_TO_BUILD="AArch64;X86" \
-  -DLLVM_ENABLE_ASSERTIONS=ON \
-  -DCMAKE_INSTALL_PREFIX=$HOME/llvm-install \
-  -DFLANG_ENABLE_WERROR=OFF
-
-ninja -j8 flang
+# 3. Build (or use the provided script)
+cd /path/to/flang-bounds-sanitizer
+./build.sh          # sets LLVM_DIR=~/llvm-project by default
 ```
 
-## How to Use
+`build.sh` handles CMake configuration and Ninja build. First build takes
+30–60 min. Override paths with environment variables:
 
 ```bash
-# Compile runtime library
-clang -c runtime/flang_bounds_check.c -o flang_bounds_check.o
-
-# Compile Fortran program with bounds checking
-flang -fcheck=bounds your_program.f90 flang_bounds_check.o -o your_program
-
-# Run
-./your_program
+LLVM_DIR=/custom/llvm JOBS=16 ./build.sh
 ```
 
-## Without Bounds Checking (baseline)
+CMake flags used:
 
-```bash
-flang -O2 your_program.f90 -o your_program
-./your_program
+```cmake
+-DCMAKE_BUILD_TYPE=Release
+-DLLVM_ENABLE_PROJECTS="clang;flang;mlir"
+-DLLVM_TARGETS_TO_BUILD="AArch64;X86"
+-DLLVM_ENABLE_ASSERTIONS=ON
+-DFLANG_ENABLE_WERROR=OFF
 ```
 
-## Covered Cases
+---
 
-| Case | Description | Status |
-|------|-------------|--------|
-| Allocatable arrays | Runtime bounds via descriptor | done |
-| Assumed-shape arrays | Caller-provided bounds | done |
-| Array slices | Transformed bounds | done |
-| Pointer arrays | Dynamic target bounds | done |
-| Static arrays | Compile-time known bounds | done |
-| 2D/3D arrays | Per-dimension bounds checking | done |
-| Strided slices | Non-unit stride access | done |
+## Running Tests
 
-## Test Results
-
-20/20 correctness tests passing, 0 false positives.
+### Compile runtime and run all 20 tests
 
 ```bash
+clang -c runtime/flang_bounds_check.c -o /tmp/flang_bounds_check.o
 cd tests
-./run_tests.sh /path/to/flang /path/to/flang_bounds_check.o
+./run_tests.sh ~/llvm-project/build/bin/flang /tmp/flang_bounds_check.o
 ```
 
-## Performance Overhead
+Expected output:
+```
+PASS: 20 | FAIL: 0 | COMPILE ERROR: 0
+```
 
-Benchmarks run on Apple M1, Flang 23.0.0.
-Baseline: `-O2`, Sanitized: `-fcheck=bounds`.
+### Compile and run a single test
 
-| Benchmark | Baseline | Sanitized | Slowdown |
-|-----------|----------|-----------|----------|
-| bench1 static sequential | 0.09s | 1.91s | 21x |
-| bench2 allocatable descriptor | 0.04s | 2.91s | 73x |
-| bench3 assumed-shape calls | 0.02s | 0.71s | 35x |
+```bash
+FLANG=~/llvm-project/build/bin/flang
+RUNTIME=/tmp/flang_bounds_check.o
 
-Overhead comes from a conditional branch to `__flang_bounds_fail`
-(a `noreturn` function) before every array access. CSE correctly
-caches descriptor reads so bounds are not re-read per iteration.
-Loop hoisting (checking once before the loop instead of per-iteration)
-would reduce overhead to ~2-5x and is left as future work.
+# With bounds checking
+$FLANG -O0 -fcheck=bounds tests/test_pgms/test_allocatable_oob.f90 $RUNTIME -o /tmp/t
+/tmp/t
+
+# Without bounds checking (baseline — silent OOB)
+$FLANG -O2 tests/test_pgms/test_allocatable_oob.f90 $RUNTIME -o /tmp/t_base
+/tmp/t_base
+```
+
+### Test cases covered (20 total)
+
+| # | File | Category | Expected |
+|---|------|----------|----------|
+| 01 | `test_static_valid.f90` | Static array | No error |
+| 02 | `test_static_oob_upper.f90` | Static array | OOB at index 11 > 10 |
+| 03 | `test_static_oob_lower.f90` | Static array | OOB at index 0 < 1 |
+| 04 | `test_allocatable_valid.f90` | Allocatable | No error |
+| 05 | `test_allocatable_oob.f90` | Allocatable | OOB at index 4 < lb=5 |
+| 06 | `test_assumed_shape_valid.f90` | Assumed-shape | No error |
+| 07 | `test_assumed_shape_oob.f90` | Assumed-shape | OOB beyond size |
+| 08 | `test_slice_valid.f90` | Array slice | No error |
+| 09 | `test_slice_complex.f90` | Array slice | OOB inside slice |
+| 10 | `test_pointer_valid.f90` | Pointer array | No error |
+| 11 | `test_pointer_oob.f90` | Pointer array | OOB via pointer |
+| 12 | `test_pointer_reassign.f90` | Pointer array | OOB after pointer retarget |
+| 13 | `test_2d_valid.f90` | 2D array | No error |
+| 14 | `test_2d_oob_dim1.f90` | 2D array | OOB in row dimension |
+| 15 | `test_3d_oob_dim3.f90` | 3D array | OOB in depth dimension |
+| 16 | `test_stride_valid.f90` | Strided slice | No error |
+| 17 | `test_stride_oob.f90` | Strided slice | OOB via stride expression |
+| 18 | `test_loop_assumed.f90` | Edge case | OOB inside loop |
+| 19 | `test_nested_calls.f90` | Edge case | OOB in nested subroutine |
+| 20 | `test_dynamic_bounds.f90` | Edge case | OOB at runtime N+1 |
+
+---
+
+## Benchmarks
+
+Measured on Apple M1, arm64-apple-darwin, Flang 23.0.0.  
+Baseline: `-O2`. Sanitized: `-fcheck=bounds`. OOB sentinels commented out for fair measurement.
+
+| Benchmark | Array Type | Baseline | Sanitized | Slowdown |
+|-----------|-----------|----------|-----------|----------|
+| `bench1_static_sequential` | Static 1D, 40M elements | 0.09 s | 1.91 s | **21×** |
+| `bench2_allocatable_descriptor` | Allocatable, custom lb | 0.04 s | 2.91 s | **73×** |
+| `bench3_assumed_shape_calls` | Assumed-shape via calls | 0.02 s | 0.71 s | **35×** |
+
+The overhead comes from one `fir.if` branch per array access. For bench1 with
+~800M accesses, even a 2–3 ns branch cost adds ~2 s. CSE correctly caches
+descriptor reads — confirmed by inspecting LLVM IR: only 4–5 `bounds_fail`
+call sites regardless of loop iteration count.
+
+**Future work:** loop hoisting (hoist the check before the loop when bounds
+and index expression are loop-invariant) would reduce overhead to ~1.1–1.3×.
+
+Run benchmarks yourself:
+
+```bash
+clang -c runtime/flang_bounds_check.c -o /tmp/flang_bounds_check.o
+python3 benchmarks/run_benchmarks_honest.py \
+  --flang ~/llvm-project/build/bin/flang \
+  --repeats 3
+```
+
+Plots are saved to `benchmarks/plots/`.
+
+---
+
+## Demo
+
+### What the sanitizer output looks like
+
+Program: `allocate(A(5:15))` then access `A(20)`.
+
+**Without `-fcheck=bounds`** — silent data corruption:
+```
+Accessing A(20) on array with bounds [5:15]...
+0.
+```
+
+**With `-fcheck=bounds`** — caught immediately:
+```
+Accessing A(20) on array with bounds [5:15]...
+
+*** Fortran Array Bounds Violation ***
+  Index:       20
+  Valid range: [5 : 15]
+  Line:        9
+```
+
+The sanitizer reads `lb=5` from the array descriptor at runtime — a sanitizer
+assuming `lb=1` (as gfortran does) would miss this entirely.
+
+### Screenshots
+
+| | |
+|---|---|
+| ![No sanitizer — silent OOB](demo/screenshot1.png) | ![Sanitizer catches OOB](demo/screenshot2.png) |
+| Without `-fcheck=bounds`: garbage value, no error | With `-fcheck=bounds`: exact index, range, line |
+
+Test suite (20/20 passing):
+
+![Test suite part 1](demo/screenshot3_1.png)
+![Test suite part 2](demo/screenshot3_2.png)
+![Test suite part 3](demo/screenshot3_3.png)
+
+Reproduce all demo output:
+
+```bash
+bash demo/run_demo.sh
+```
+
+---
 
 ## Project Structure
 
-- **src/**
-  Reference copies of the key source files:
-  `HLFIRBoundsCheck.cpp` (the MLIR pass) and `flang_bounds_check.c` (runtime).
+```
+flang-bounds-sanitizer/
+├── build.sh                        # Apply patch + CMake configure + ninja build
+├── run.sh                          # Compile runtime + run demo + run test suite
+├── flang_bounds_check.patch        # Git patch to apply to LLVM monorepo
+│
+├── src/
+│   ├── HLFIRBoundsCheck.cpp        # The MLIR pass (reference copy)
+│   └── flang_bounds_check.c        # Runtime library (reference copy)
+│
+├── pass/
+│   ├── HLFIRBoundsCheck.cpp        # Pass implementation (same as src/)
+│   └── Passes.td                   # TableGen pass descriptor (modified)
+│
+├── runtime/
+│   └── flang_bounds_check.c        # C runtime: __flang_bounds_fail (noreturn)
+│                                   #            __flang_bounds_check (wrapper)
+│
+├── tests/
+│   ├── run_tests.sh                # Automated test runner
+│   └── test_pgms/                  # 20 Fortran test programs
+│       ├── test_static_*.f90       # Static array cases (3)
+│       ├── test_allocatable_*.f90  # Allocatable array cases (2)
+│       ├── test_assumed_shape_*.f90# Assumed-shape cases (2)
+│       ├── test_slice_*.f90        # Array slice cases (2)
+│       ├── test_pointer_*.f90      # Pointer array cases (3)
+│       ├── test_2d_*.f90           # Multi-dimensional cases (2)
+│       ├── test_3d_*.f90           # 3D array cases (1)
+│       ├── test_stride_*.f90       # Strided slice cases (2)
+│       └── test_{loop,nested,dynamic}*.f90  # Edge cases (3)
+│
+├── benchmarks/
+│   ├── run_benchmarks_honest.py    # Real measurement script
+│   ├── benchmark_results_real.csv  # Actual measured results
+│   ├── bench1_static_sequential.f90
+│   ├── bench2_allocatable_descriptor.f90
+│   ├── bench3_assumed_shape_calls.f90
+│   └── plots/                      # PNG charts (mean time, overhead, slowdown)
+│
+└── demo/
+    ├── run_demo.sh                 # Produces labelled output for screenshots
+    ├── screenshot1.png             # Without -fcheck=bounds (silent OOB)
+    ├── screenshot2.png             # With -fcheck=bounds (OOB caught)
+    ├── screenshot3_{1,2,3}.png     # Test suite 20/20 passing
+    └── *.txt                       # Pre-captured annotated output
+```
 
-- **pass/**
-  Reference copy of the pass and its TableGen descriptor (`Passes.td`).
+---
 
-- **runtime/**
-  C-based runtime library (`__flang_bounds_check`, `__flang_bounds_fail`).
+## Known Limitations
 
-- **tests/**
-  - 20 correctness test cases
-  - `run_tests.sh` — automated test runner
+| Limitation | Detail |
+|------------|--------|
+| **High overhead** | 21–73× on tight loops; loop hoisting would reduce to ~1.1–1.3× |
+| **Coarrays** | Not supported |
+| **Allocatable components of derived types** | Not supported |
+| **Per-access (not per-loop) checks** | Every array access gets a branch; no loop-invariant hoisting yet |
 
-- **benchmarks/**
-  - 3 performance benchmarks
-  - `run_benchmarks_honest.py` — real measurement script
-  - `benchmark_results_real.csv` — real overhead measurements
-  - `plots/` — visualization of benchmark results
-
-- **demo/**
-  - `run_demo.sh` — script that produces clean terminal output for screenshots
-  - Pre-captured output files (`.txt`) for all three demo scenarios
-
-- **flang_bounds_check.patch**
-  Git patch to apply to a fresh LLVM checkout (see "How to Apply" above).
+---
 
 ## LLVM Version
 
-Built and tested against:
-`flang version 23.0.0 (https://github.com/llvm/llvm-project.git 46c427b6...)`
-Target: `arm64-apple-darwin`
+```
+flang version 23.0.0 (https://github.com/llvm/llvm-project.git 46c427b6ff77...)
+Target: arm64-apple-darwin25.4.0
+Thread model: posix
+```
