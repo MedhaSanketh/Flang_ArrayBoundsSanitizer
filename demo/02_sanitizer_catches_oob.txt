@@ -1,0 +1,25 @@
+=== DEMO: With -fcheck=bounds (bounds checking ON) ===
+
+Same program: demo_oob.f90
+  allocate(A(5:15))   ! bounds: lb=5, ub=15
+  A(5) = 99.0
+  i = 20              ! out-of-bounds index
+  print *, A(i)       ! CAUGHT by sanitizer
+
+Compile:
+  $ flang -fcheck=bounds demo_oob.f90 flang_bounds_check.o -o demo_safe
+
+Run:
+  $ ./demo_safe
+
+Output:
+  Accessing A(20) on array with bounds [5:15]...
+
+  *** Fortran Array Bounds Violation ***
+    Index:       20
+    Valid range: [5 : 15]
+    Line:        9
+
+--- The sanitizer catches the violation, prints exact index + valid range,  ---
+--- and aborts immediately before corrupting memory.                         ---
+--- Custom lower bound (lb=5) is correctly read from the array descriptor.   ---

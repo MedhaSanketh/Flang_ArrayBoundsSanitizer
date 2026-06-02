@@ -164,14 +164,17 @@ would reduce overhead to ~2-5x and is left as future work.
 
 ## Project Structure
 
+- **src/**
+  Reference copies of the key source files:
+  `HLFIRBoundsCheck.cpp` (the MLIR pass) and `flang_bounds_check.c` (runtime).
+
 - **pass/**
-  Contains the HLFIR instrumentation pass implementation.
+  Reference copy of the pass and its TableGen descriptor (`Passes.td`).
 
 - **runtime/**
   C-based runtime library (`__flang_bounds_check`, `__flang_bounds_fail`).
 
 - **tests/**
-  Includes:
   - 20 correctness test cases
   - `run_tests.sh` — automated test runner
 
@@ -179,11 +182,14 @@ would reduce overhead to ~2-5x and is left as future work.
   - 3 performance benchmarks
   - `run_benchmarks_honest.py` — real measurement script
   - `benchmark_results_real.csv` — real overhead measurements
-  - `benchmark_results.csv` — original results (kept for reference)
   - `plots/` — visualization of benchmark results
 
+- **demo/**
+  - `run_demo.sh` — script that produces clean terminal output for screenshots
+  - Pre-captured output files (`.txt`) for all three demo scenarios
+
 - **flang_bounds_check.patch**
-  Patch file to be applied to the LLVM/Flang source tree.
+  Git patch to apply to a fresh LLVM checkout (see "How to Apply" above).
 
 ## LLVM Version
 

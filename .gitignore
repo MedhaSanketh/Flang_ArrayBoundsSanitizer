@@ -1,3 +1,6 @@
+# Local environment (contains machine-specific paths)
+.env
+
 # Compiled binaries
 benchmarks/*_base
 benchmarks/*_san

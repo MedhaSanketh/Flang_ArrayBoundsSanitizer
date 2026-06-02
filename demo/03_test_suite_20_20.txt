@@ -1,0 +1,38 @@
+=== TEST SUITE: 20/20 passing, 0 false positives ===
+
+Command:
+  $ cd tests && ./run_tests.sh ~/llvm-project/build/bin/flang /tmp/flang_bounds_check.o
+
+Output:
+Using flang: /Users/medhasanketh/llvm-project/build/bin/flang
+Using runtime: /tmp/flang_bounds_check.o
+
+PASS: test_2d_oob_dim1
+PASS: test_2d_valid
+PASS: test_3d_oob_dim3
+PASS: test_allocatable_oob
+PASS: test_allocatable_valid
+PASS: test_assumed_shape_oob
+PASS: test_assumed_shape_valid
+PASS: test_dynamic_bounds
+PASS: test_loop_assumed
+PASS: test_nested_calls
+PASS: test_pointer_oob
+PASS: test_pointer_reassign
+PASS: test_pointer_valid
+PASS: test_slice_complex
+PASS: test_slice_valid
+PASS: test_static_oob_lower
+PASS: test_static_oob_upper
+PASS: test_static_valid
+PASS: test_stride_oob
+PASS: test_stride_valid
+
+================================
+PASS: 20 | FAIL: 0 | COMPILE ERROR: 0
+================================
+
+--- 14 OOB programs detected correctly.                            ---
+--- 6 valid programs produced no false positives.                  ---
+--- Covers: static, allocatable, assumed-shape, slice, pointer,    ---
+---         2D/3D, strided, nested calls, dynamic bounds.          ---

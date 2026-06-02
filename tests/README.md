@@ -2,7 +2,8 @@
 
 ## Overview
 
-This suite contains **20 correctness tests** and **3 benchmarks** for validating a compiler-based array bounds checking sanitizer in Flang (HLFIR-aware).
+This suite contains **20 correctness tests** for validating a compiler-based
+array bounds checking sanitizer in Flang (HLFIR-aware). Benchmarks are in `benchmarks/`.
 
 Focus areas:
 
@@ -16,8 +17,9 @@ Pointer-based arrays (dynamic targets)
 ## Directory Layout
 
 ```
-fortran_test_suite/
+tests/
 ├── README.md
+├── run_tests.sh
 │
 ├── test_pgms/
 ├── -- STATIC ARRAYS --
@@ -60,43 +62,31 @@ fortran_test_suite/
 
 ---
 
-## Setup Environment
-
-Create a `.env` file in the project root with the following variables (replace placeholders with your actual system paths):
-
-```bash
-# .env template
-export FLANG="/path/to/your/llvm-project/build/bin/flang-new"
-export RUNTIME="/path/to/Flang_ArrayBoundsSanitizer/runtime/flang_bounds_check.o"
-export SDK="/path/to/your/MacOSX.sdk" (optional)
-export TESTS="/path/to/Flang_ArrayBoundsSanitizer/tests"
-```
-
-Then, load the environment variables:
-
-```bash
-# From the project root
-source .env
-```
-
----
-
 ## How to Compile & Run
 
 ### **Run All Tests**
 
-Execute the automated test suite:
+```bash
+# From the repo root
+clang -c runtime/flang_bounds_check.c -o /tmp/flang_bounds_check.o
+cd tests
+./run_tests.sh ~/llvm-project/build/bin/flang /tmp/flang_bounds_check.o
+```
+
+Or use the top-level script:
 
 ```bash
-$TESTS/run_tests.sh $FLANG $RUNTIME
+./run.sh
 ```
 
 ### **Run Individual Program**
 
-Compile and run a specific file with the HLFIR bounds sanitizer:
-
 ```bash
-$FLANG -O0 -mllvm -bounds-check-hlfir -isysroot $SDK $TESTS/test_pgms/<NAME>.f90 $RUNTIME -o /tmp/bin && /tmp/bin
+FLANG=~/llvm-project/build/bin/flang
+RUNTIME=/tmp/flang_bounds_check.o
+
+$FLANG -O0 -fcheck=bounds tests/test_pgms/<NAME>.f90 $RUNTIME -o /tmp/bin
+/tmp/bin
 ```
 
 ---

@@ -1,0 +1,20 @@
+=== DEMO: Without -fcheck=bounds (no bounds checking) ===
+
+Program: demo_oob.f90
+  allocate(A(5:15))   ! bounds: lb=5, ub=15
+  A(5) = 99.0
+  i = 20              ! out-of-bounds index
+  print *, A(i)       ! silent OOB — no error, wrong value returned
+
+Compile:
+  $ flang demo_oob.f90 flang_bounds_check.o -o demo_unsafe
+
+Run:
+  $ ./demo_unsafe
+
+Output:
+  Accessing A(20) on array with bounds [5:15]...
+  0.
+
+--- The program silently returns garbage (0.) instead of aborting. ---
+--- No warning. No indication that the access was out of bounds.   ---
