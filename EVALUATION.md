@@ -5,6 +5,7 @@
 **20/20 tests passing, 0 false positives.**
 
 | Category | Total | OOB | Detected | False Pos. |
+|----------|-------|-----|----------|------------|
 | Static arrays | 3 | 2 | 2/2 | 0 |
 | Allocatable | 2 | 1 | 1/1 | 0 |
 | Assumed-shape | 2 | 1 | 1/1 | 0 |
@@ -40,6 +41,7 @@ Baseline: `-O2`. Sanitized: `-fcheck=bounds`.
 OOB sentinel lines commented out for fair valid-phase measurement.
 
 | Benchmark | Baseline | Sanitized | Slowdown | Array Type |
+|-----------|----------|-----------|----------|------------|
 | bench1_static_sequential | 0.09s | 1.91s | 21x | Static 1D |
 | bench2_allocatable_descriptor | 0.04s | 2.91s | 73x | Allocatable |
 | bench3_assumed_shape_calls | 0.02s | 0.71s | 35x | Assumed-shape |
@@ -47,6 +49,7 @@ OOB sentinel lines commented out for fair valid-phase measurement.
 ## Comparison with Existing Tools
 
 | Approach | Descriptor-Aware | Slice-Exact | Custom lb | Overhead | False Pos. |
+|----------|-----------------|-------------|-----------|----------|------------|
 | **HLFIR Pass (ours)** | **Yes** | **Yes** | **Yes** | 21-73x* | **None** |
 | gfortran -fbounds-check | Partial | No | Partial | Low | Rare |
 | AddressSanitizer | No | No | No | ~2x | None |
