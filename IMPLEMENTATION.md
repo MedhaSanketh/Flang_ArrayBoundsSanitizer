@@ -1,10 +1,9 @@
-# Implementation Details — Flang HLFIR-Aware Array Bounds Sanitizer
+# Implementation Details : Flang HLFIR-Aware Array Bounds Sanitizer
 
 ## Files Modified in LLVM/Flang Source
 
 | File | Change |
-|------|--------|
-| `flang/lib/Optimizer/HLFIR/Transforms/HLFIRBoundsCheck.cpp` | **New** — the pass |
+| `flang/lib/Optimizer/HLFIR/Transforms/HLFIRBoundsCheck.cpp` | **New** - the pass |
 | `flang/include/flang/Optimizer/HLFIR/Passes.td` | Pass registration |
 | `flang/lib/Optimizer/HLFIR/Transforms/CMakeLists.txt` | Build system |
 | `flang/include/flang/Optimizer/Passes/Pipelines.h` | Pipeline signature |
@@ -41,15 +40,15 @@ pm.addPass(hlfir::createConvertHLFIRtoFIR());
 ## Driver Flag Chain (-fcheck=bounds)
 User: flang -fcheck=bounds program.f90
 ↓
-Options.td          → flag defined, visible in --help
+Options.td          -> flag defined, visible in --help
 ↓
-Flang.cpp           → driver forwards -fcheck=bounds to fc1
+Flang.cpp           -> driver forwards -fcheck=bounds to fc1
 ↓
-CompilerInvocation  → opts.BoundsCheck = 1
+CompilerInvocation  -> opts.BoundsCheck = 1
 ↓
-CrossToolHelpers.h  → config.EnableBoundsCheck = opts.BoundsCheck
+CrossToolHelpers.h  -> config.EnableBoundsCheck = opts.BoundsCheck
 ↓
-Pipelines.cpp       → if enableBoundsCheck → addPass(HLFIRBoundsCheck)
+Pipelines.cpp       -> if enableBoundsCheck -> addPass(HLFIRBoundsCheck)
 
 ## HLFIR Before/After the Pass
 
@@ -57,26 +56,26 @@ Pipelines.cpp       → if enableBoundsCheck → addPass(HLFIRBoundsCheck)
 ```mlir
 %15 = fir.load %2
 %c20 = arith.constant 20 : index
-%16 = hlfir.designate %15 (%c20)   ← no check
+%16 = hlfir.designate %15 (%c20)   <- no check
 ```
 
 **After:**
 ```mlir
-%dims = fir.box_dims %15, %c0      ← read descriptor
-%lb   = %dims#0                     ← lower bound
-%ub   = %lb + %dims#1 - 1          ← upper bound
+%dims = fir.box_dims %15, %c0      <- read descriptor
+%lb   = %dims#0                     <- lower bound
+%ub   = %lb + %dims#1 - 1          <- upper bound
 fir.if %outOfBounds {
-    call @__flang_bounds_fail(...)  ← noreturn
+    call @__flang_bounds_fail(...)  <- noreturn
 }
-%16 = hlfir.designate %15 (%c20)   ← original access
+%16 = hlfir.designate %15 (%c20)   <- original access
 ```
 
 ## Runtime Library
 
 Two functions in `runtime/flang_bounds_check.c`:
 
-- `__flang_bounds_fail(index, lb, ub, line)` — `noreturn`, error path only
-- `__flang_bounds_check(index, lb, ub, line)` — wrapper, kept for compatibility
+- `__flang_bounds_fail(index, lb, ub, line)` : `noreturn`, error path only
+- `__flang_bounds_check(index, lb, ub, line)` : wrapper, kept for compatibility
 
 ## LLVM Version
 
