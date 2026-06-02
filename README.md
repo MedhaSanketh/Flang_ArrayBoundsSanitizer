@@ -1,14 +1,13 @@
 # Flang HLFIR-Aware Array Bounds Sanitizer
 
 A compiler-based runtime bounds-checking sanitizer for Fortran programs compiled
-with Flang. Implemented as an MLIR pass at the HLFIR level — the only point in
+with Flang. Implemented as an MLIR pass at the HLFIR level: the only point in
 the compilation pipeline where full array descriptor metadata is still available.
 
 **Authors:** Medha Sanketh · Kalianpur Rohith  
 **Target:** Apple M1 (arm64-apple-darwin), Flang 23.0.0, LLVM 23 monorepo  
-**Status:** 20/20 tests passing · 0 false positives · 21–73× overhead (no loop hoisting)
+**Status:** 20/20 tests passing · 0 false positives 
 
----
 
 ## Table of Contents
 
@@ -24,7 +23,6 @@ the compilation pipeline where full array descriptor metadata is still available
 10. [Project Structure](#project-structure)
 11. [Known Limitations](#known-limitations)
 
----
 
 ## The Problem
 
@@ -36,7 +34,6 @@ data corruption and hard-to-debug crashes** in these programs.
 Existing tools all fall short:
 
 | Tool | What it misses | Root cause |
-|------|---------------|------------|
 | `gfortran -fcheck=bounds` | Assumed-shape, array slices, custom lower bounds, multi-dim | Runs too late — descriptor metadata already lost |
 | AddressSanitizer | All Fortran array semantics | Operates on raw memory, not Fortran arrays |
 | Valgrind Memcheck | Semantic violations (valid address, wrong element) | Same — sees bytes, not Fortran bounds |
@@ -45,8 +42,6 @@ Existing tools all fall short:
 The core failure: by the time these tools run, the Fortran array has been
 lowered to raw pointer arithmetic. The rich metadata — lower bounds, extents,
 slice offsets, pointer targets — is gone.
-
----
 
 ## Why HLFIR?
 
@@ -57,7 +52,6 @@ compilation pipeline than any prior IR.
 At the HLFIR level, before lowering to FIR/LLVM IR:
 
 | IR concept | What it means for bounds checking |
-|------------|----------------------------------|
 | `hlfir.designate` | Every array element access is an explicit, typed operation |
 | `fir.box` | Every dynamic array carries a descriptor: lower bound, extent, stride per dimension |
 | Slice operations | Transformed bounds are explicit — `A(3:8)` passed as assumed-shape has `lb=1, extent=6` in the callee's descriptor |
@@ -66,8 +60,6 @@ At the HLFIR level, before lowering to FIR/LLVM IR:
 **Once the compiler lowers past HLFIR to FIR, all of this dissolves into raw
 pointer arithmetic.** HLFIR is the only level where precise, complete bounds
 checking is possible.
-
----
 
 ## Solution Design
 
@@ -148,7 +140,6 @@ in `flang_bounds_check.patch`. Reference copies of the key files are in `src/`
 and `pass/`.
 
 | File | Change |
-|------|--------|
 | `flang/lib/Optimizer/HLFIR/Transforms/HLFIRBoundsCheck.cpp` | **New** — the MLIR pass |
 | `flang/include/flang/Optimizer/HLFIR/Passes.td` | Pass registration (TableGen) |
 | `flang/lib/Optimizer/HLFIR/Transforms/CMakeLists.txt` | Build system entry |
@@ -291,7 +282,6 @@ Measured on Apple M1, arm64-apple-darwin, Flang 23.0.0.
 Baseline: `-O2`. Sanitized: `-fcheck=bounds`. OOB sentinels commented out for fair measurement.
 
 | Benchmark | Array Type | Baseline | Sanitized | Slowdown |
-|-----------|-----------|----------|-----------|----------|
 | `bench1_static_sequential` | Static 1D, 40M elements | 0.09 s | 1.91 s | **21×** |
 | `bench2_allocatable_descriptor` | Allocatable, custom lb | 0.04 s | 2.91 s | **73×** |
 | `bench3_assumed_shape_calls` | Assumed-shape via calls | 0.02 s | 0.71 s | **35×** |
@@ -345,7 +335,6 @@ assuming `lb=1` (as gfortran does) would miss this entirely.
 ### Screenshots
 
 | | |
-|---|---|
 | ![No sanitizer — silent OOB](demo/screenshot1.png) | ![Sanitizer catches OOB](demo/screenshot2.png) |
 | Without `-fcheck=bounds`: garbage value, no error | With `-fcheck=bounds`: exact index, range, line |
 
@@ -417,7 +406,6 @@ flang-bounds-sanitizer/
 ## Known Limitations
 
 | Limitation | Detail |
-|------------|--------|
 | **High overhead** | 21–73× on tight loops; loop hoisting would reduce to ~1.1–1.3× |
 | **Coarrays** | Not supported |
 | **Allocatable components of derived types** | Not supported |
